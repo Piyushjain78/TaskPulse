@@ -1,0 +1,124 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+enum Role {
+  MANAGER
+  EMPLOYEE
+}
+
+enum TaskStatus {
+  PENDING
+  IN_PROGRESS
+  COMPLETED
+  APPROVED
+  RETURNED
+}
+
+enum TaskPriority {
+  LOW
+  MEDIUM
+  HIGH
+}
+
+enum TimerRunState {
+  STOPPED
+  RUNNING
+  PAUSED
+}
+
+model User {
+  id        String   @id @default(uuid())
+  name      String
+  email     String   @unique
+  /// E.164 for WhatsApp (e.g. +9198xxxxxxx). Optional until configured.
+  phone     String?
+  password  String
+  role      Role
+  managerId String?
+  manager   User?    @relation("ManagerEmployees", fields: [managerId], references: [id])
+  employees User[]   @relation("ManagerEmployees")
+
+  tasksAssigned Task[] @relation("AssignedTasks")
+  tasksCreated  Task[] @relation("CreatedTasks")
+  comments      Comment[]
+  notifications Notification[]
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+}
+
+model Task {
+  id          String       @id @default(uuid())
+  title       String
+  description String?
+  status      TaskStatus
+  priority    TaskPriority
+  dueDate     DateTime?
+
+  assignedTo String
+  assignee   User   @relation("AssignedTasks", fields: [assignedTo], references: [id])
+  createdBy  String
+  creator    User   @relation("CreatedTasks", fields: [createdBy], references: [id])
+
+  /// Server-authoritative timer: last segment start (for persistence display)
+  timerRunState TimerRunState @default(STOPPED)
+  activeSegmentStart DateTime?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  timeLogs    TimeLog[]
+  comments    Comment[]
+  deliveryLogs DeliveryLog[]
+  notifications Notification[]
+}
+
+model TimeLog {
+  id        String    @id @default(uuid())
+  taskId    String
+  task      Task      @relation(fields: [taskId], references: [id], onDelete: Cascade)
+  startTime DateTime
+  endTime   DateTime?
+  createdAt DateTime  @default(now())
+}
+
+model Comment {
+  id        String   @id @default(uuid())
+  taskId    String
+  task      Task     @relation(fields: [taskId], references: [id], onDelete: Cascade)
+  userId    String
+  user      User     @relation(fields: [userId], references: [id])
+  message   String
+  parentId  String?
+  parent    Comment? @relation("CommentThread", fields: [parentId], references: [id])
+  replies   Comment[] @relation("CommentThread")
+  createdAt DateTime @default(now())
+}
+
+model Notification {
+  id        String   @id @default(uuid())
+  userId    String
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  taskId    String?
+  task      Task?    @relation(fields: [taskId], references: [id], onDelete: Cascade)
+  message   String
+  read      Boolean  @default(false)
+  createdAt DateTime @default(now())
+}
+
+model DeliveryLog {
+  id        String   @id @default(uuid())
+  taskId    String?
+  task      Task?    @relation(fields: [taskId], references: [id], onDelete: SetNull)
+  status    String
+  provider  String
+  payload   String?
+  error     String?
+  createdAt DateTime @default(now())
+}
